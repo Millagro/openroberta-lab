@@ -60,10 +60,10 @@ var cmdPropToORB = {
 function configSensor(id, type, mode, option) {
     id = id - 1;
     if (0 <= id && id < 4) {
-        cmdPropToORB.propToORB.Sensor[id].type = type;
-        cmdPropToORB.propToORB.Sensor[id].mode = mode;
-        cmdPropToORB.propToORB.Sensor[id].option = option;
-        console.log("configSensor", "OK: " + "port=" + id + "," + JSON.stringify(cmdPropToORB.propToORB.Sensor[id]));
+        cmdConfigToORB.configToORB.Sensor[id].type = type;
+        cmdConfigToORB.configToORB.Sensor[id].mode = mode;
+        cmdConfigToORB.configToORB.Sensor[id].option = option;
+        console.log("configSensor", "OK: " + "port=" + id + "," + JSON.stringify(cmdConfigToORB.configToORB.Sensor[id]));
     }
     else
         console.log("configSensor", "Err:wrong id");
@@ -72,6 +72,19 @@ function getSensorValue(id) {
     id = id - 1;
     if (0 <= id && id < 4) {
         return (propFromORB.Sensor[id].value);
+    }
+    return (0);
+}
+function getSensorValueGyro(id) {
+    id = id - 1;
+    if (0 <= id && id < 4) {
+        if (propFromORB.Sensor[id].value <= 32767) {
+            return (propFromORB.Sensor[id].value);
+        }
+        else {
+            propFromORB.Sensor[id].value = propFromORB.Sensor[id].value - 65536;
+            return (propFromORB.Sensor[id].value);
+        }
     }
     return (0);
 }
@@ -84,7 +97,7 @@ function getSensorAnalog(id, ch) {
 }
 function getSensorDigital(id, ch) {
     id = id - 1;
-    if (0 <= id && id < 4 && 0 <= cg && ch < 2) {
+    if (0 <= id && id < 4 && 0 <= ch && ch < 2) { //erste ch = cg
         return (propFromORB.Sensor[id].digital[ch]);
     }
     return (false);
@@ -170,29 +183,6 @@ define(["require", "exports", "interpreter.aRobotBehaviour", "interpreter.consta
             this.btInterfaceFct(cmdPropToORB);
             return (Math.max(timeToGoL, timeToGoR));
         };
-        /*
-        RobotOrbBehaviour.prototype.setMoveToDriveForr = function (speedL, speedR, deltaL, deltaR) {
-            // Zuordnung Seite und Einbaurichtung fehlen
-            //var distanceToTics = 1000.0/(driveConfig.wheelDiameter * Math.PI);//1 cm = 79,617834 Tick zu viel
-            var distanceToTics = 500.0 / (driveConfig.wheelDiameter * Math.PI);// 1cm = 29,..
-
-            deltaL *= distanceToTics;
-            deltaR *= distanceToTics;
-            speedL = Math.abs(10 * speedL);
-            speedR = Math.abs(10 * speedR);
-
-            var targetL = getMotorPos(driveConfig.motorL.port) + driveConfig.motorL.orientation * deltaL;
-            var targetR = getMotorPos(driveConfig.motorR.port) + driveConfig.motorR.orientation * deltaR;
-
-            var timeToGoL = this.calcTimeToGo(speedL, deltaL);
-            var timeToGoR = this.calcTimeToGo(speedR, deltaR);
-
-            setMotor(driveConfig.motorL.port, 3, speedL, targetL);
-            setMotor(driveConfig.motorR.port, 3, speedR, targetR);
-            this.btInterfaceFct(cmdConfigToORB);
-            this.btInterfaceFct(cmdPropToORB);
-            return (Math.max(timeToGoL, timeToGoR));
-        }*/
         RobotOrbBehaviour.prototype.update = function (data) {
             U.info('update type:' + data.type + ' state:' + data.state + ' sensor:' + data.sensor + ' actor:' + data.actuator);
             if (data.target !== "orb") {
@@ -288,20 +278,62 @@ define(["require", "exports", "interpreter.aRobotBehaviour", "interpreter.consta
             this.toDisplayFct({ "clear": true });
         };
         RobotOrbBehaviour.prototype.getSample = function (s, name, sensor, port, slot) {
-            // Hier fehlt die Zuordnung, welcher Sensortyp und welcher Port gemeint ist !
+            configSensor(port, 1, 0, 0);
             if (sensor == "ultrasonic") {
-                if (slot == "distance") {
-                    //cmdConfigToORB muss verändert werden
-                    cmdConfigToORB.configToORB.Sensor[0].type = 1;
-                    cmdConfigToORB.configToORB.Sensor[0].mode = 0;
+                cmdConfigToORB.configToORB.Sensor[port - 1].type = 1;
+                if (slot == "distance") { //dis in mm,
+                    configSensor(port, 1, 0, 0);
+                    this.btInterfaceFct(cmdConfigToORB); //ist zu schnell, schon besser
+                    s.push(getSensorValue(port));
+                }
+                else if (slot == "presence") {
+                    configSensor(port, 1, 2, 0);
                     this.btInterfaceFct(cmdConfigToORB);
-                    this.btInterfaceFct(cmdPropToORB);
-                    //getSensorValue(id)
-                    s.push(getSensorValue(1));
+                    s.push(getSensorValue(port));
                 }
             }
-            else {
-                s.push(getSensorValue(99));
+            else if (sensor == "color") {
+                if (slot == "colour") {
+                    configSensor(port, 1, 2, 0);
+                    this.btInterfaceFct(cmdConfigToORB);
+                    s.push(getSensorValue(port));
+                }
+                if (slot == "light") {
+                    configSensor(port, 1, 0, 0);
+                    this.btInterfaceFct(cmdConfigToORB);
+                    s.push(getSensorValue(port));
+                }
+                if (slot == "ambientlight") {
+                    configSensor(port, 1, 1, 0);
+                    this.btInterfaceFct(cmdConfigToORB);
+                    s.push(getSensorValue(port));
+                }
+                if (slot == "rgb") {
+                    configSensor(port, 1, 4, 0);
+                    this.btInterfaceFct(cmdConfigToORB);
+                    s.push(getSensorValue(port));
+                }
+            }
+            else if (sensor == "touch") {
+                configSensor(port, 3, 0, 0); //ALLES TESTEN
+                this.btInterfaceFct(cmdConfigToORB);
+                //s.push(getSensorAnalog(port,0));
+                //s.push(getSensorAnalog(port,1));
+                s.push(getSensorDigital(port, 0));
+                //s.push(getSensorDigital(port,1));//Sollte bei Zweiten Digital sein
+                //s.push(getSensorValue(port));
+            }
+            else if (sensor == "gyro") {
+                if (slot == "angle") {
+                    configSensor(port, 1, 0, 0);
+                    this.btInterfaceFct(cmdConfigToORB);
+                    s.push(getSensorValueGyro(port));
+                }
+                if (slot == "rate") {
+                    configSensor(port, 1, 1, 0);
+                    this.btInterfaceFct(cmdConfigToORB);
+                    s.push(getSensorValue(port));
+                }
             }
             return;
         };
@@ -413,11 +445,9 @@ define(["require", "exports", "interpreter.aRobotBehaviour", "interpreter.consta
             var timeToGo = 0;
             if (duration === undefined) { // SPEED mode
                 setMotor(port, 2, gradToTics * speed, 0);
-                //setMotor(port, 2, 10 * speed, 0);
             }
             else {
                 setMotor(port, 3, gradToTics * speed, getMotorPos(port) + gradToTics * duration);
-                //setMotor(port, 3, 10 * speed, getMotorPos(port) + gradToTics * duration);
                 timeToGo = this.calcTimeToGo(speed, duration);
             }
             this.btInterfaceFct(cmdConfigToORB);
